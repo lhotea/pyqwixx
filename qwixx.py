@@ -1,5 +1,5 @@
 import unittest
-import math
+import random
 
 _colors = {"green": range(12,0,-1), "blue": range(12,0,-1), "yellow": range(2,14,1), "red": range(2,14,1)}
 
@@ -225,80 +225,121 @@ class Player:
            raise Exception("Maximum failures reached")
 
 class Game:
-    _players = []
-    _status = {}
-    _numOfPlayers = 0
 
-
-    def __init__(self,players=4,**settings):
-
-        Game._numOfPlayers = players
+    def __init__(self,players=4,setupplayer = None,**settings):
+        self._plays = { 'ROLL':self._play_roll, 'WHITE':self._play_white, 'TOKENPLAYER':self._play_token_player, 'SCORE':self._play_score}
+        self._numOfPlayers = players
+        self._players = []
+        self._status = {}
+        self._round = 0
+        self._dices = {}
         for col in _colors.keys():
-            Game._status[col]=True
+            self._status[col]=True
 
-        self._setupPlayer(players, **settings)
+        setupplayer = self._setupPlayer if not(setupplayer) else setupplayer
+        setupplayer(players, **settings)
+        self._state = 'ROLL'
 
     def _setupPlayer(self, players, **settings):
         for i in range(1, players + 1):
             playerName = input("Enter name of player {} :".format(i))
-            Game._players.append(Player(playerName, **settings))
+            self._players.append(Player(playerName, **settings))
 
-    def play(self):
-        round = 0
+    def run(self):
+        while self._state != "END":
+            self._play('ask')
+#            print ( "{} : {}  ".format(dice,self._dices[dice]) for dice in self._dices.keys() )
+            print("player : {}".format(self._currentPlayer.name))
+            print('#'.join(str(i) for i in self._currentPlayer.yellow._slots))
+            print('#'.join(str(i) for i in self._currentPlayer.red._slots))
+            print('#'.join(str(i) for i in self._currentPlayer.blue._slots))
+            print('#'.join(str(i) for i in self._currentPlayer.green._slots))
+            print ( self._dices )
+
+
+    def _play(self,*args):
+        self._plays[self._state](*args)
+
+    def _roll_dices(self):
+        self._dices = {color:random.randint(1,6) for color in list(self._status.keys()) + ['white-1','white-2'] if self._status.get(color,True)}
+
+    def _play_roll(self,color = None):
+        self._round +=1
+        self._player_num = self._round % self._numOfPlayers
+        self._tokenPlayer = self._players[ self._player_num ]
+        self._currentPlayer = self._tokenPlayer
+        self._close = {}
+        self._played = {}
+        self._roll_dices()
+        self._state = 'WHITE'
+
+
+    def _next_player(self):
+        self._player_num = ( self._player_num + 1 ) % self._numOfPlayers
+        self._currentPlayer = self._players[ self._player_num ]
+        if self._currentPlayer == self._tokenPlayer:
+            raise Exception('Last Player')
+
+        pass
+
+    def _play_white(self,white):
+        white = self._chooseColor("white") if white == 'ask' else white
+        if white and self._status[white]:
+                            try:
+                                value = self._getDiceValue('white-1') + self._getDiceValue('white-2')
+                                self._currentPlayer.__dict__[white].check(int(value))
+                                self._played[self._currentPlayer]=True
+                            except Exception as e:
+                                if e.args[0] == 'Row is closed':
+                                    self._close[white]=False
+                                else:
+                                    raise
         try:
-            while len([color for color in Game._status if not(Game._status[color])]) < 2:
-                round +=1
-                tokenPlayer = Game._players[ round % Game._numOfPlayers ]
-                close = {}
-                played = {}
-                for player in Game._players:
-                    white = self._chooseColor(player,"white")
-                    if white and Game._status[white]:
-                        try:
-                            value = self._getDiceValue(player,white)
-                            player.__dict__[white].check(int(value))
-                            played[player]=True
-                        except(Exception) as e:
-                            if e.args[0] == 'Row is closed':
-                                close[white]=False
-                                pass
-                            else:
-                                raise
-
-                Game._status.update(**close)
-                colored = self._chooseColor(tokenPlayer,"colored")
-                if colored and Game._status[colored]:
-                    try:
-                        value = self._getDiceValue(tokenPlayer,colored)
-                        tokenPlayer.__dict__[colored].check(int(value))
-                    except(Exception) as e:
-                        if e.args[0] == 'Row is closed':
-                            Game._status[colored]=False
-                            pass
-                        else:
-                            raise
-                elif not(played.setdefault(tokenPlayer,False)):
-                    tokenPlayer.fail()
-        except(Exception) as e:
-            if e.args[0] == "Maximum failures reached":
-                for player in self._players:
-                    print( "player {} your score is {}".format(player.name,sum(player.__dict__[color].score() for color in _colors.keys()) - 5 * player._fails))
+         self._next_player()
+        except Exception as e:
+            if e.args[0] == 'Last Player':
+                self._status.update(**self._close)
+                self._state = 'TOKENPLAYER' if len([color for color in self._status if not(self._status[color])]) < 2 else 'SCORE'
             else:
                 raise
 
+    def _play_token_player(self,colored,white='white-1'):
+        colored = self._chooseColor("colored") if colored == 'ask' else colored
+        try:
+                if colored and self._status[colored]:
+                    try:
+                        value = self._getDiceValue(colored) + self._getDiceValue(white)
+                        self._tokenPlayer.__dict__[colored].check(int(value))
+                    except(Exception) as e:
+                        if e.args[0] == 'Row is closed':
+                            self._status[colored]=False
+                        else:
+                            raise
+                elif not(self._played.setdefault(self._tokenPlayer,False)):
+                    self._tokenPlayer.fail()
+                self._state = 'ROLL' if len([color for color in self._status if not(self._status[color])]) < 2 else 'SCORE'
+        except(Exception) as e:
+            if e.args[0] == "Maximum failures reached":
+                self._state = 'SCORE'
+            else:
+                raise
 
+    def _play_score(self,color = None):
+        self._dices = {}
+        for player in self._players:
+                    print( "player {} your score is {}".format(player.name,sum(player.__dict__[color].score() for color in _colors.keys()) - 5 * player._fails))
+        self._state = 'END'
 
-
-    def _getDiceValue(self, player, color):
-        value = input("{} enter value for {} : ".format(player.name,color))
+    def _getDiceValue(self, color):
+        value = input("{} enter value for {} : ".format(self._currentPlayer.name,color)) if color == 'ask' else self._dices[color]
         return value
 
-    def _chooseColor(self, player, color):
-        white = input("{} enter color for {} : ".format(player.name,color))
+    def _chooseColor(self, color):
+        white = input("{} enter color for {} : ".format(self._currentPlayer.name,color))
         return white
 
 
 if __name__ == "__main__":
     #unittest.main()
-    Game(2).play()
+    Game(2).run()
 
