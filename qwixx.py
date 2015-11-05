@@ -228,6 +228,8 @@ class Game:
 
     def __init__(self,players=4,setupplayer = None,**settings):
         self._plays = { 'ROLL':self._play_roll, 'WHITE':self._play_white, 'TOKENPLAYER':self._play_token_player, 'SCORE':self._play_score}
+
+
         self._numOfPlayers = players
         self._players = []
         self._status = {}
@@ -247,21 +249,38 @@ class Game:
 
     def run(self):
         while self._state != "END":
-            self._play('ask')
+
+            showTable=len(self._plays[self._state].dices.keys())
+            if showTable:
+                print("player : {}".format(self._currentPlayer.name))
+                print("yellow: " + '#'.join(str(i) for i in self._currentPlayer.yellow._slots))
+                print("red: " +'#'.join(str(i) for i in self._currentPlayer.red._slots))
+                print("blue: " +'#'.join(str(i) for i in self._currentPlayer.blue._slots))
+                print("green: " +'#'.join(str(i) for i in self._currentPlayer.green._slots))
+
+            for param in self._plays[self._state].dices.keys():
+                print (self.__dict__["_{}_dices".format(Game._map[param])])
+
+            for param in self._plays[self._state].dices.keys():
+                self._plays[self._state].dices[param] = self._chooseColor(param)
+
+            self._play()
+
+            if showTable:
+                print("yellow: " + '#'.join(str(i) for i in self._currentPlayer.yellow._slots))
+                print("red: " +'#'.join(str(i) for i in self._currentPlayer.red._slots))
+                print("blue: " +'#'.join(str(i) for i in self._currentPlayer.blue._slots))
+                print("green: " +'#'.join(str(i) for i in self._currentPlayer.green._slots))
+
 #            print ( "{} : {}  ".format(dice,self._dices[dice]) for dice in self._dices.keys() )
-            print("player : {}".format(self._currentPlayer.name))
-            print('#'.join(str(i) for i in self._currentPlayer.yellow._slots))
-            print('#'.join(str(i) for i in self._currentPlayer.red._slots))
-            print('#'.join(str(i) for i in self._currentPlayer.blue._slots))
-            print('#'.join(str(i) for i in self._currentPlayer.green._slots))
-            print ( self._dices )
 
 
     def _play(self,*args):
         self._plays[self._state](*args)
 
     def _roll_dices(self):
-        self._dices = {color:random.randint(1,6) for color in list(self._status.keys()) + ['white-1','white-2'] if self._status.get(color,True)}
+        self._colored_dices = {color:random.randint(1,6) for color in self._status.keys() if self._status.get(color,True)}
+        self._white_dices = {color:random.randint(1,6) for color in ['white-1','white-2']}
 
     def _play_roll(self,color = None):
         self._round +=1
@@ -280,11 +299,9 @@ class Game:
         if self._currentPlayer == self._tokenPlayer:
             raise Exception('Last Player')
 
-        pass
-
-    def _play_white(self,white):
-        white = self._chooseColor("white") if white == 'ask' else white
-        if white and self._status[white]:
+    def _play_white(self):
+        white = Game._play_white.dices['white-color']
+        if white:
                             try:
                                 value = self._getDiceValue('white-1') + self._getDiceValue('white-2')
                                 self._currentPlayer.__dict__[white].check(int(value))
@@ -303,8 +320,9 @@ class Game:
             else:
                 raise
 
-    def _play_token_player(self,colored,white='white-1'):
-        colored = self._chooseColor("colored") if colored == 'ask' else colored
+    def _play_token_player(self):
+        colored = Game._play_token_player.dices['colored-dice']
+        white = Game._play_token_player.dices['colored-white-dice']
         try:
                 if colored and self._status[colored]:
                     try:
@@ -324,18 +342,24 @@ class Game:
             else:
                 raise
 
-    def _play_score(self,color = None):
+    def _play_score(self):
         self._dices = {}
         for player in self._players:
                     print( "player {} your score is {}".format(player.name,sum(player.__dict__[color].score() for color in _colors.keys()) - 5 * player._fails))
         self._state = 'END'
 
+    _play_white.dices={"white-color":None}
+    _play_score.dices={}
+    _play_token_player.dices={"colored-dice":None, "colored-white-dice":None}
+    _play_roll.dices={}
+    _map = {"white-color":"white", "colored-dice":"colored", "colored-white-dice":"white"  }
+
     def _getDiceValue(self, color):
-        value = input("{} enter value for {} : ".format(self._currentPlayer.name,color)) if color == 'ask' else self._dices[color]
-        return value
+        dices = self._colored_dices if _colors.get(color,False) else self._white_dices
+        return dices[color]
 
     def _chooseColor(self, color):
-        white = input("{} enter color for {} : ".format(self._currentPlayer.name,color))
+        white = input("{} enter value for {} : ".format(self._currentPlayer.name,color))
         return white
 
 
