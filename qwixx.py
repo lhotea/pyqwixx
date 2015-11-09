@@ -413,5 +413,5 @@ class Game:
 
 
 if __name__ == "__main__":
-    unittest.main()
-    # Game(2).run()
+    #unittest.main()
+    Game(2).run()
